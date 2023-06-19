@@ -66,7 +66,7 @@ async def echo(message : types.Message):
         if len(message.text) == 5:
             check_file = os.path.exists(f'biser_pic/c{message.text}.jpg')
             if check_file:
-                doc = open(f'biser_pic\c{message.text}.jpg', 'rb')
+                doc = open(f'biser_pic/c{message.text}.jpg', 'rb')
                 await message.reply_photo(doc)
             else:
                 await message.answer("Нажаль такого бісеру немає в моїй базі даних!")
