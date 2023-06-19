@@ -1,0 +1,9 @@
+conf.py
+debug.txt
+test.py
+*.png
+*.db
+*.bat
+venv
+.idea
+biser_pic
