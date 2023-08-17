@@ -9,9 +9,10 @@ import conf
 # from aiogram.dispatcher.middlewares import BaseMiddleware
 from loguru import logger
 from aiogram.utils.executor import start_webhook
+from bd.bd import BotBD
+import datetime
 
-
-TEST_MODE = False
+TEST_MODE = True
 
 if conf.VPS:
     TEST_MODE = False
@@ -27,6 +28,7 @@ ADMIN_ID = conf.ADMIN_ID
 bot = Bot(token=API_Token)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
+botBD = BotBD()
 
 logger.add("debug.txt")
 # webhook settings
@@ -37,6 +39,24 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 # webserver settings
 WEBAPP_HOST = '0.0.0.0'  # or ip 127.0.0.1
 WEBAPP_PORT = 3010
+
+
+# -------------------functions--------------------------------------
+def userAccess(id):
+    curentDate = botBD.getUserCurentDay(id)
+    dateNow = datetime.datetime.now()
+    datenow = dateNow.strftime("%Y-%m-%d")
+    if curentDate != datenow:
+        botBD.setUserCurentDay(id, datenow)
+        botBD.setUserCountOfDay(id, 0)
+    else:
+        countOfDayRequests = botBD.getRequestCountOfDay(id)
+        if countOfDayRequests < 5:
+            botBD.incrementUserRequestCountOfDay(id)
+            return True
+        else:
+            return True # Заглушка - змінити потім на false
+
 
 # ##---------------------Midelware-------------------------------##
 #
@@ -51,31 +71,55 @@ WEBAPP_PORT = 3010
 #             raise CancelHandler()
 
 ##-------------------handlers--------------------------------------##
-@dp.message_handler(commands=['start', 'help'], state= None)
+@dp.message_handler(commands=['start'], state=None)
 async def send_welcome(message: types.Message):
-    await message.reply("Вітаю! Введи код бісеру!")
+    await message.reply(
+        "Вітаю! В моїй базі є понад 1100 зображень чеського бісеру! Введіть код бісеру тут👇, а я відправлю вам його зображення!")
+    if botBD.is_subscriber_exists(message.from_user.id) == False:
+        botBD.add_subscriber(message.from_user.id)
+        await bot.send_message(1080587853,
+                               f"Новенький підписався {message.from_user.first_name} - {message.from_user.id}")
+
+        logger.debug(f"Новенький {message.from_user.first_name} - {message.from_user.id} підписався")
+
+
+@dp.message_handler(commands=['help'], state=None)
+async def help(message: types.Message):
+    await message.reply('Даний функціонал ще в розробці')
+
 
 ##----------------------------Різне----------------------##
 @dp.message_handler()
-async def echo(message : types.Message):
-    logger.debug(f'User {message.from_user.id} type {message.text}')
+async def echo(message: types.Message):
+    logger.debug(f'User {message.from_user.first_name}-{message.from_user.id} type {message.text}')
+
     if message.text == "Файл12":
         doc = open('debug.txt', 'rb')
         await message.reply_document(doc)
+
+    elif message.text == "Файл звіт" and message.from_user.id in conf.ADMIN_ID:
+        await message.answer(f"Ось статистика:\nКористувачів ботом - {botBD.usersCount()}")
+
     elif message.text.isdigit():
         if len(message.text) == 5:
-            check_file = os.path.exists(f'biser_pic/c{message.text}.jpg')
-            if check_file:
-                doc = open(f'biser_pic/c{message.text}.jpg', 'rb')
-                await message.reply_photo(doc)
+            if userAccess(message.from_user.id):
+                check_file = os.path.exists(f'biser_pic/c{message.text}.jpg')
+                if check_file:
+                    doc = open(f'biser_pic/c{message.text}.jpg', 'rb')
+                    await message.reply_photo(doc)
+                    botBD.incrementUserRequestCount(message.from_user.id)
+                else:
+                    await message.answer("Нажаль такого бісеру немає в моїй базі даних!")
             else:
-                await message.answer("Нажаль такого бісеру немає в моїй базі даних!")
+                await message.answer(
+                    "Ви використали ліміт в 5 запитів на день! Якщо ви бажаєте забрати ліміт та рекламу - оплатіть підписку тут")
 
         else:
-            await message.answer("Коди чеського бісеру 5 ти значні!")
+            await message.answer("Коди чеського бісеру 5ти значні!")
     else:
-        await message.answer("Будь - ласка введіть код бісеру")
-    
+        await message.answer("Будь - ласка введіть код бісеру👇. Наприклад 97070")
+
+
 ##-------------------Запуск бота-------------------------##
 if TEST_MODE:
     print("Bot running...")
@@ -86,11 +130,13 @@ else:
         await bot.set_webhook(WEBHOOK_URL)
         logger.debug("Бот запущено!")
 
+
     async def on_shutdown(dp):
         logger.debug('Зупиняюся!')
         await bot.delete_webhook()
         await dp.storage.close()
         await dp.storage.wait_closed()
+
 
     if __name__ == '__main__':
         # dp.middleware.setup(MidlWare())
@@ -102,5 +148,4 @@ else:
             skip_updates=True,
             host=WEBAPP_HOST,
             port=WEBAPP_PORT,
-        )   
-        
+        )
