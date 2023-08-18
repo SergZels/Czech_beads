@@ -46,16 +46,21 @@ def userAccess(id):
     curentDate = botBD.getUserCurentDay(id)
     dateNow = datetime.datetime.now()
     datenow = dateNow.strftime("%Y-%m-%d")
+    countOfRequest = botBD.getRequestCount(id)
+
     if curentDate != datenow:
         botBD.setUserCurentDay(id, datenow)
         botBD.setUserCountOfDay(id, 0)
-    else:
+
+    if countOfRequest>=300: # початковий ліміт на кількість
         countOfDayRequests = botBD.getRequestCountOfDay(id)
         if countOfDayRequests < 5:
             botBD.incrementUserRequestCountOfDay(id)
             return True
         else:
-            return True # Заглушка - змінити потім на false
+            return False # перевершив денний ліміт
+    else:
+        return True
 
 
 # ##---------------------Midelware-------------------------------##
