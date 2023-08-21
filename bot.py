@@ -11,6 +11,7 @@ from loguru import logger
 from aiogram.utils.executor import start_webhook
 from bd.bd import BotBD
 import datetime
+import localization
 
 TEST_MODE = True
 
@@ -62,6 +63,15 @@ def userAccess(id):
     else:
         return True
 
+def loc(id,str):
+    language = botBD.getUserLocalization(id)
+    for index, value in  localization.UA.items():
+        if str == value:
+            break
+    if language == "UA":
+        return localization.UA[index]
+    else:
+        return localization.EN[index]
 
 # ##---------------------Midelware-------------------------------##
 #
@@ -78,8 +88,7 @@ def userAccess(id):
 ##-------------------handlers--------------------------------------##
 @dp.message_handler(commands=['start'], state=None)
 async def send_welcome(message: types.Message):
-    await message.reply(
-        "Вітаю! В моїй базі є понад 1100 зображень чеського бісеру! Введіть код бісеру тут👇, а я відправлю вам його зображення!")
+    await message.reply(loc(message.from_user.id, "Вітаю! В моїй базі є понад 1100 зображень чеського бісеру! Введіть код бісеру тут👇, а я відправлю вам його зображення!"))
     if botBD.is_subscriber_exists(message.from_user.id) == False:
         botBD.add_subscriber(message.from_user.id)
         await bot.send_message(1080587853,
@@ -96,13 +105,14 @@ async def help(message: types.Message):
 ##----------------------------Різне----------------------##
 @dp.message_handler()
 async def echo(message: types.Message):
-    logger.debug(f'User {message.from_user.first_name}-{message.from_user.id} type {message.text}')
+    userId = message.from_user.id
+    logger.debug(f'User {message.from_user.first_name}-{userId} type {message.text}')
 
     if message.text == "Файл12":
         doc = open('debug.txt', 'rb')
         await message.reply_document(doc)
 
-    elif message.text == "Файл звіт" and message.from_user.id in conf.ADMIN_ID:
+    elif message.text == "Стат" and userId in conf.ADMIN_ID:
         await message.answer(f"Ось статистика:\nКористувачів ботом - {botBD.usersCount()}")
 
     elif message.text.isdigit():
@@ -112,17 +122,17 @@ async def echo(message: types.Message):
                 if check_file:
                     doc = open(f'biser_pic/c{message.text}.jpg', 'rb')
                     await message.reply_photo(doc)
-                    botBD.incrementUserRequestCount(message.from_user.id)
+                    botBD.incrementUserRequestCount(userId)
                 else:
-                    await message.answer("Нажаль такого бісеру немає в моїй базі даних!")
+                    await message.answer(loc(userId ,"Нажаль такого бісеру немає в моїй базі даних!"))
             else:
-                await message.answer(
-                    "Ви використали ліміт в 5 запитів на день! Якщо ви бажаєте забрати ліміт та рекламу - оплатіть підписку тут")
+                await message.answer(loc(userId,
+                    "Ви використали ліміт в 5 запитів на день! Якщо ви бажаєте забрати ліміт та рекламу - оплатіть підписку тут"))
 
         else:
-            await message.answer("Коди чеського бісеру 5ти значні!")
+            await message.answer(loc(userId,"Коди чеського бісеру 5ти значні!"))
     else:
-        await message.answer("Будь - ласка введіть код бісеру👇. Наприклад 97070")
+        await message.answer(loc(userId,"Будь - ласка введіть код бісеру👇. Наприклад 97070"))
 
 
 ##-------------------Запуск бота-------------------------##
