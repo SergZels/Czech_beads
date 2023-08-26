@@ -1,5 +1,6 @@
 from aiogram import Bot, types
 from aiogram.dispatcher import Dispatcher, FSMContext
+from aiogram.dispatcher.filters.state import StatesGroup,State
 # from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils import executor
 import os.path
@@ -12,6 +13,7 @@ from aiogram.utils.executor import start_webhook
 from bd.bd import BotBD
 import datetime
 import localization
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 TEST_MODE = True
 
@@ -41,13 +43,25 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 WEBAPP_HOST = '0.0.0.0'  # or ip 127.0.0.1
 WEBAPP_PORT = 3010
 
+#-----------------ststes-------------------------------
+class FSMSendPhoto(StatesGroup):
+    photo = State()
 
+#----------------клавіатури----------------------------
+kbcl = ReplyKeyboardMarkup(resize_keyboard=True)
+kbcl.add('Отримати реквізити💳')
+kbkv = ReplyKeyboardMarkup(resize_keyboard=True)
+kbkv.add('Надіслати квитанцію🧾')
 # -------------------functions--------------------------------------
 def userAccess(id):
     curentDate = botBD.getUserCurentDay(id)
     dateNow = datetime.datetime.now()
     datenow = dateNow.strftime("%Y-%m-%d")
     countOfRequest = botBD.getRequestCount(id)
+    paymentStatus = botBD.getUserPaymentStatus(id)
+
+    if paymentStatus == "yes":
+        return True
 
     if curentDate != datenow:
         botBD.setUserCurentDay(id, datenow)
@@ -102,18 +116,55 @@ async def help(message: types.Message):
     await message.reply('Даний функціонал ще в розробці')
 
 
+@dp.message_handler(content_types=[types.ContentType.PHOTO])
+async def handle_file(message: types.Message):
+    await message.photo[-1].download(f'invoice/{message.from_user.id}.jpg')
+    doc = open(f'invoice/{message.from_user.id}.jpg', 'rb')
+    await bot.send_message(1080587853,f"Користувач {message.from_user.first_name} - {message.from_user.id} надіслав файл")
+    await bot.send_photo(1080587853,doc)
+    await message.answer(f"Дякуємо! Файл отримано!")
+    logger.info(f"Користувач {message.from_user.id} надіслав файл")
+
+@dp.message_handler(content_types=[types.ContentType.DOCUMENT])
+async def handle_file(message: types.Message):
+    document = message.document
+    file_name = document.file_name
+    file_path = f'invoice/{file_name}'
+    await document.download(file_path)
+    await bot.send_message(1080587853,f"Користувач {message.from_user.first_name} - {message.from_user.id} надіслав файл")
+    with open(file_path, 'rb') as document_file:
+        await bot.send_document(chat_id=1080587853, document=document_file)
+    await message.answer(f"Дякуємо! Файл отримано! Активація профілю на протязі 24 год.")
+    logger.info(f"Користувач {message.from_user.id} надіслав файл {file_name}")
+
 ##----------------------------Різне----------------------##
 @dp.message_handler()
 async def echo(message: types.Message):
     userId = message.from_user.id
     logger.debug(f'User {message.from_user.first_name}-{userId} type {message.text}')
 
-    if message.text == "Файл12":
+    if message.text == "Файл12" and userId in conf.ADMIN_ID:
         doc = open('debug.txt', 'rb')
         await message.reply_document(doc)
 
+    elif message.text.startswith("#") and userId in conf.ADMIN_ID:
+        id = message.text[1:]
+        botBD.setUserPaymentStatus(id, "yes")
+        status = botBD.getUserPaymentStatus(id)
+        if status == "yes":
+            await message.answer(f"Профіль активовано")
+            await bot.send_message(id, f"Безліміт активовано!")
+
+
     elif message.text == "Стат" and userId in conf.ADMIN_ID:
         await message.answer(f"Ось статистика:\nКористувачів ботом - {botBD.usersCount()}")
+
+    elif message.text == "Отримати реквізити💳":
+        await message.answer(f"Приват 052212154545411\nЗелінська Ю.В.\n Після оплати ОБОВЯЗКОВО надішліть в боті квитанцію.",reply_markup=kbkv)
+    elif message.text == "Надіслати квитанцію🧾":
+        await message.answer(
+            f"Прикріпіть файл із квитанцією на надішліть в боті.",reply_markup=types.ReplyKeyboardRemove())
+
 
     elif message.text.isdigit():
         if len(message.text) == 5:
@@ -125,9 +176,9 @@ async def echo(message: types.Message):
                     botBD.incrementUserRequestCount(userId)
                 else:
                     await message.answer(loc(userId ,"Нажаль такого бісеру немає в моїй базі даних!"))
-            else:
+            else:          
                 await message.answer(loc(userId,
-                    "Ви використали ліміт в 5 запитів на день! Якщо ви бажаєте забрати ліміт та рекламу - оплатіть підписку тут"))
+                    "Ви використали ліміт в 5 запитів на день! Якщо ви бажаєте забрати ліміт оплатіть одноразову підписку в розмірі 350грн та надішліть квитанцію про оплату."),reply_markup=kbcl)
 
         else:
             await message.answer(loc(userId,"Коди чеського бісеру 5ти значні!"))
