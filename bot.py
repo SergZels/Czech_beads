@@ -1,6 +1,6 @@
 from aiogram import Bot, types
 from aiogram.dispatcher import Dispatcher, FSMContext
-from aiogram.dispatcher.filters.state import StatesGroup,State
+from aiogram.dispatcher.filters.state import StatesGroup, State
 # from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils import executor
 import os.path
@@ -35,7 +35,7 @@ botBD = BotBD()
 
 logger.add("debug.txt")
 # webhook settings
-WEBHOOK_HOST = 'https://vmi957205.contaboserver.net'
+WEBHOOK_HOST = 'https://zelse.asuscomm.com'
 WEBHOOK_PATH = '/prod_chbeads'
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
@@ -43,49 +43,64 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 WEBAPP_HOST = '0.0.0.0'  # or ip 127.0.0.1
 WEBAPP_PORT = 3010
 
-#-----------------ststes-------------------------------
+
+# -----------------ststes-------------------------------
 class FSMSendPhoto(StatesGroup):
     photo = State()
 
-#----------------клавіатури----------------------------
+# ----------------клавіатури----------------------------
 kbcl = ReplyKeyboardMarkup(resize_keyboard=True)
 kbcl.add('Отримати реквізити💳')
 kbkv = ReplyKeyboardMarkup(resize_keyboard=True)
 kbkv.add('Надіслати квитанцію🧾')
+
+
 # -------------------functions--------------------------------------
 def userAccess(id):
-    curentDate = botBD.getUserCurentDay(id)
-    dateNow = datetime.datetime.now()
-    datenow = dateNow.strftime("%Y-%m-%d")
-    countOfRequest = botBD.getRequestCount(id)
-    paymentStatus = botBD.getUserPaymentStatus(id)
+    try:
+        curentDate = botBD.getUserCurentDay(id)
+        dateNow = datetime.datetime.now()
+        datenow = dateNow.strftime("%Y-%m-%d")
+        countOfRequest = botBD.getRequestCount(id)
+        paymentStatus = botBD.getUserPaymentStatus(id)
 
-    if paymentStatus == "yes":
-        return True
 
-    if curentDate != datenow:
-        botBD.setUserCurentDay(id, datenow)
-        botBD.setUserCountOfDay(id, 0)
-
-    if countOfRequest>=300: # початковий ліміт на кількість
-        countOfDayRequests = botBD.getRequestCountOfDay(id)
-        if countOfDayRequests < 5:
-            botBD.incrementUserRequestCountOfDay(id)
+        if paymentStatus == "yes":
             return True
-        else:
-            return False # перевершив денний ліміт
-    else:
-        return True
 
-def loc(id,str):
-    language = botBD.getUserLocalization(id)
-    for index, value in  localization.UA.items():
-        if str == value:
-            break
-    if language == "UA":
-        return localization.UA[index]
-    else:
-        return localization.EN[index]
+        if curentDate != datenow:
+            botBD.setUserCurentDay(id, datenow)
+            botBD.setUserCountOfDay(id, 0)
+
+        if countOfRequest >= 300:  # початковий ліміт на кількість
+            countOfDayRequests = botBD.getRequestCountOfDay(id)
+            if countOfDayRequests < 5:
+                botBD.incrementUserRequestCountOfDay(id)
+                return True
+            else:
+                return False  # перевершив денний ліміт
+        else:
+            return True
+
+    except IndexError:
+        logger.debug(f"Index error {id} ")
+
+    except Exception as e:
+       
+        logger.debug(f"Виникла помилка: {e}")
+
+
+def loc(id, str):
+    # language = botBD.getUserLocalization(id)
+    # for index, value in localization.UA.items():
+    #     if str == value:
+    #         break
+    # if language == "UA":
+    #     return localization.UA[index]
+    # else:
+    #     return localization.EN[index]
+    return str
+
 
 # ##---------------------Midelware-------------------------------##
 #
@@ -102,7 +117,8 @@ def loc(id,str):
 ##-------------------handlers--------------------------------------##
 @dp.message_handler(commands=['start'], state=None)
 async def send_welcome(message: types.Message):
-    await message.reply(loc(message.from_user.id, "Вітаю! В моїй базі є понад 1100 зображень чеського бісеру! Введіть код бісеру тут👇, а я відправлю вам його зображення!"))
+    await message.reply(loc(message.from_user.id,
+                            "Вітаю! В моїй базі є понад 1100 зображень чеського бісеру! Введіть код бісеру тут👇, а я відправлю вам його зображення!"))
     if botBD.is_subscriber_exists(message.from_user.id) == False:
         botBD.add_subscriber(message.from_user.id)
         await bot.send_message(1080587853,
@@ -120,26 +136,37 @@ async def help(message: types.Message):
 async def handle_file(message: types.Message):
     await message.photo[-1].download(f'invoice/{message.from_user.id}.jpg')
     doc = open(f'invoice/{message.from_user.id}.jpg', 'rb')
-    await bot.send_message(1080587853,f"Користувач {message.from_user.first_name} - {message.from_user.id} надіслав файл")
-    await bot.send_photo(1080587853,doc)
+    await bot.send_message(1080587853,
+                           f"Користувач {message.from_user.first_name} - {message.from_user.id} надіслав файл. Для активації профілю #{message.from_user.id}")
+    await bot.send_photo(1080587853, doc)
     await message.answer(f"Дякуємо! Файл отримано!")
     logger.info(f"Користувач {message.from_user.id} надіслав файл")
+
 
 @dp.message_handler(content_types=[types.ContentType.DOCUMENT])
 async def handle_file(message: types.Message):
     document = message.document
     file_name = document.file_name
-    file_path = f'invoice/{file_name}'
+    file_path = f'invoice/{message.from_user.id}{file_name}'
     await document.download(file_path)
-    await bot.send_message(1080587853,f"Користувач {message.from_user.first_name} - {message.from_user.id} надіслав файл")
+    await bot.send_message(1080587853,
+                           f"Користувач {message.from_user.first_name} - {message.from_user.id} надіслав файл. Для активації профілю #{message.from_user.id}")
     with open(file_path, 'rb') as document_file:
         await bot.send_document(chat_id=1080587853, document=document_file)
     await message.answer(f"Дякуємо! Файл отримано! Активація профілю на протязі 24 год.")
     logger.info(f"Користувач {message.from_user.id} надіслав файл {file_name}")
 
+
 ##----------------------------Різне----------------------##
 @dp.message_handler()
 async def echo(message: types.Message):
+    if botBD.is_subscriber_exists(message.from_user.id) == False:
+        botBD.add_subscriber(message.from_user.id)
+        await bot.send_message(1080587853,
+                               f"Новенький підписався {message.from_user.first_name} - {message.from_user.id}")
+
+        logger.debug(f"Новенький {message.from_user.first_name} - {message.from_user.id} підписався")
+
     userId = message.from_user.id
     logger.debug(f'User {message.from_user.first_name}-{userId} type {message.text}')
 
@@ -157,13 +184,15 @@ async def echo(message: types.Message):
 
 
     elif message.text == "Стат" and userId in conf.ADMIN_ID:
-        await message.answer(f"Ось статистика:\nКористувачів ботом - {botBD.usersCount()}")
+        await message.answer(f"Ось статистика:\nКористувачів ботом - {botBD.usersCount()}\n{botBD.getAllUsers()}")
 
     elif message.text == "Отримати реквізити💳":
-        await message.answer(f"Приват 052212154545411\nЗелінська Ю.В.\n Після оплати ОБОВЯЗКОВО надішліть в боті квитанцію.",reply_markup=kbkv)
+        await message.answer(
+            f"Приват 4149439046626911\nЗелінська Ю.В.\nПісля оплати ОБОВЯЗКОВО надішліть в боті квитанцію.",
+            reply_markup=kbkv)
     elif message.text == "Надіслати квитанцію🧾":
         await message.answer(
-            f"Прикріпіть файл із квитанцією на надішліть в боті.",reply_markup=types.ReplyKeyboardRemove())
+            f"Прикріпіть файл із квитанцією на надішліть в боті.", reply_markup=types.ReplyKeyboardRemove())
 
 
     elif message.text.isdigit():
@@ -175,15 +204,16 @@ async def echo(message: types.Message):
                     await message.reply_photo(doc)
                     botBD.incrementUserRequestCount(userId)
                 else:
-                    await message.answer(loc(userId ,"Нажаль такого бісеру немає в моїй базі даних!"))
-            else:          
+                    await message.answer(loc(userId, "Нажаль такого бісеру немає в моїй базі даних!"))
+            else:
                 await message.answer(loc(userId,
-                    "Ви використали ліміт в 5 запитів на день! Якщо ви бажаєте забрати ліміт оплатіть одноразову підписку в розмірі 350грн та надішліть квитанцію про оплату."),reply_markup=kbcl)
+                                         "Ви використали ліміт в 5 запитів на день! Якщо ви бажаєте забрати ліміт оплатіть одноразову підписку в розмірі 350грн та надішліть квитанцію про оплату."),
+                                     reply_markup=kbcl)
 
         else:
-            await message.answer(loc(userId,"Коди чеського бісеру 5ти значні!"))
+            await message.answer(loc(userId, "Коди чеського бісеру 5ти значні!"))
     else:
-        await message.answer(loc(userId,"Будь - ласка введіть код бісеру👇. Наприклад 97070"))
+        await message.answer(loc(userId, "Будь - ласка введіть код бісеру👇. Наприклад 97070"))
 
 
 ##-------------------Запуск бота-------------------------##
